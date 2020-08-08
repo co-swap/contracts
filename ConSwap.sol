@@ -730,6 +730,92 @@ contract InitializableAdminUpgradeabilityProxy is BaseAdminUpgradeabilityProxy, 
 }
 
 
+interface IProxyFactory {
+    function productImplementation() external view returns (address);
+}
+
+
+/**
+ * @title ProductProxy
+ * @dev This contract implements a proxy that 
+ * it is deploied by ProxyFactory, 
+ * and it's implementation is stored in factory.
+ */
+contract ProductProxy is Proxy {
+    
+  /**
+   * @dev Storage slot with the address of the ProxyFactory.
+   * This is the keccak-256 hash of "eip1967.proxy.factory" subtracted by 1, and is
+   * validated in the constructor.
+   */
+  bytes32 internal constant FACTORY_SLOT = 0x7a45a402e4cb6e08ebc196f20f66d5d30e67285a2a8aa80503fa409e727a4af1;
+
+  /**
+   * @dev Sets the factory address of the ProductProxy.
+   * @param newFactory Address of the new factory.
+   */
+  function _setFactory(address newFactory) internal {
+    require(OpenZeppelinUpgradesAddress.isContract(newFactory), "Cannot set a factory to a non-contract address");
+
+    bytes32 slot = FACTORY_SLOT;
+
+    assembly {
+      sstore(slot, newFactory)
+    }
+  }
+
+  /**
+   * @dev Returns the factory.
+   * @return Address of the factory.
+   */
+  function _factory() internal view returns (address factory) {
+    bytes32 slot = FACTORY_SLOT;
+    assembly {
+      factory := sload(slot)
+    }
+  }
+  
+  /**
+   * @dev Returns the current implementation.
+   * @return Address of the current implementation
+   */
+  function _implementation() internal view returns (address) {
+    address factory = _factory();
+    if(OpenZeppelinUpgradesAddress.isContract(factory))
+        return IProxyFactory(factory).productImplementation();
+    else
+        return address(0);
+  }
+
+}
+
+
+/**
+ * @title InitializableProductProxy
+ * @dev Extends ProductProxy with an initializer for initializing
+ * factory and init data.
+ */
+contract InitializableProductProxy is ProductProxy {
+  /**
+   * @dev Contract initializer.
+   * @param factory Address of the initial factory.
+   * @param data Data to send as msg.data to the implementation to initialize the proxied contract.
+   * It should include the signature and the parameters of the function to be called, as described in
+   * https://solidity.readthedocs.io/en/v0.4.24/abi-spec.html#function-selector-and-argument-encoding.
+   * This parameter is optional, if no data is given the initialization call to proxied contract will be skipped.
+   */
+  function initialize(address factory, bytes memory data) public payable {
+    require(_factory() == address(0));
+    assert(FACTORY_SLOT == bytes32(uint256(keccak256('eip1967.proxy.factory')) - 1));
+    _setFactory(factory);
+    if(data.length > 0) {
+      (bool success,) = factory.delegatecall(data);
+      require(success);
+    }
+  }  
+}
+
+
 contract ProxyFactory {
   
   event ProxyCreated(address proxy);
