@@ -723,7 +723,7 @@ contract InitializableAdminUpgradeabilityProxy is BaseAdminUpgradeabilityProxy, 
    * https://solidity.readthedocs.io/en/v0.4.24/abi-spec.html#function-selector-and-argument-encoding.
    * This parameter is optional, if no data is given the initialization call to proxied contract will be skipped.
    */
-  function initialize(address _logic, address _admin, bytes memory _data) public payable {
+  function initialize(address _admin, address _logic, bytes memory _data) public payable {
     require(_implementation() == address(0));
     InitializableUpgradeabilityProxy.initialize(_logic, _data);
     assert(ADMIN_SLOT == bytes32(uint256(keccak256('eip1967.proxy.admin')) - 1));
@@ -817,7 +817,7 @@ contract InitializableProductProxy is ProductProxy {
   }  
 }
 
-
+/*
 contract ProxyFactory {
   
   event ProxyCreated(address proxy);
@@ -912,7 +912,7 @@ contract ProxyFactory {
     return keccak256(abi.encodePacked(_salt, _sender)); 
   }
 }
-
+*/
 
 contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
     
@@ -926,12 +926,12 @@ contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
-    constructor(address _feeToSetter) public {
-        feeToSetter = _feeToSetter;
+    constructor() public {
+        feeToSetter = msg.sender;
     }
 
     function initialize(address _feeToSetter, address _productImplementation) public {
-        require(feeToSetter== address(0), 'ConSwapFactory.initialize can be delegatecall once by proxy only.');
+        require(feeToSetter== address(0) && _feeToSetter != address(0), 'ConSwapFactory.initialize can be delegatecall once by proxy only.');
         feeToSetter = _feeToSetter;
         productImplementation = _productImplementation;
     }
@@ -970,6 +970,26 @@ contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
     function setProductImplementation(address _productImplementation) public {
         require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
         productImplementation = _productImplementation;
+    }
+}
+
+
+contract ConSwapFactoryFactory {
+    
+    event Deploy(address);
+    
+    constructor(address adminFactory, address adminPair) public payable {
+        ConSwapPair pair = new ConSwapPair();
+        emit Deploy(address(pair));
+        
+        ConSwapFactory factory = new ConSwapFactory();
+        emit Deploy(address(factory));
+        
+        InitializableAdminUpgradeabilityProxy factoryProxy = new InitializableAdminUpgradeabilityProxy();
+        factoryProxy.initialize(adminFactory, address(factory), abi.encodeWithSignature('initialize(address,address)', adminPair, address(pair)));
+        emit Deploy(address(factoryProxy));
+        
+        selfdestruct(msg.sender);
     }
 }
 
