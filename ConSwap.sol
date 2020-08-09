@@ -199,7 +199,7 @@ contract UniswapV2ERC20 is IUniswapV2ERC20 {
     }
 }
 
-contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
+contract ConSwapPair is IUniswapV2Pair, UniswapV2ERC20 {
     using SafeMath  for uint;
     using UQ112x112 for uint224;
 
@@ -255,7 +255,9 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
 
     // called once by the factory at time of deployment
     function initialize(address _token0, address _token1) external {
-        require(msg.sender == factory, 'UniswapV2: FORBIDDEN'); // sufficient check
+        //require(msg.sender == factory, 'UniswapV2: FORBIDDEN'); // sufficient check
+        require(factory == address(0), 'ConSwapPair.initialize Can be delegatecall once by proxy only');
+        factory = msg.sender;
         token0 = _token0;
         token1 = _token1;
     }
@@ -912,7 +914,10 @@ contract ProxyFactory {
 }
 
 
-contract UniswapV2Factory is IUniswapV2Factory {
+contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
+    
+    address public productImplementation;
+    
     address public feeTo;
     address public feeToSetter;
 
@@ -925,6 +930,12 @@ contract UniswapV2Factory is IUniswapV2Factory {
         feeToSetter = _feeToSetter;
     }
 
+    function initialize(address _feeToSetter, address _productImplementation) public {
+        require(feeToSetter== address(0), 'ConSwapFactory.initialize can be delegatecall once by proxy only.');
+        feeToSetter = _feeToSetter;
+        productImplementation = _productImplementation;
+    }
+    
     function allPairsLength() external view returns (uint) {
         return allPairs.length;
     }
@@ -934,12 +945,12 @@ contract UniswapV2Factory is IUniswapV2Factory {
         (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
         require(token0 != address(0), 'UniswapV2: ZERO_ADDRESS');
         require(getPair[token0][token1] == address(0), 'UniswapV2: PAIR_EXISTS'); // single check is sufficient
-        bytes memory bytecode = type(UniswapV2Pair).creationCode;
+        bytes memory bytecode = type(InitializableProductProxy).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(token0, token1));
         assembly {
             pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        IUniswapV2Pair(pair).initialize(token0, token1);
+        InitializableProductProxy(uint160(pair)).initialize(address(this), abi.encodeWithSignature('initialize(address,address)', token0, token1));
         getPair[token0][token1] = pair;
         getPair[token1][token0] = pair; // populate mapping in the reverse direction
         allPairs.push(pair);
@@ -954,6 +965,11 @@ contract UniswapV2Factory is IUniswapV2Factory {
     function setFeeToSetter(address _feeToSetter) external {
         require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
         feeToSetter = _feeToSetter;
+    }
+    
+    function setProductImplementation(address _productImplementation) public {
+        require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
+        productImplementation = _productImplementation;
     }
 }
 
