@@ -811,7 +811,7 @@ contract InitializableProductProxy is ProductProxy {
     assert(FACTORY_SLOT == bytes32(uint256(keccak256('eip1967.proxy.factory')) - 1));
     _setFactory(factory);
     if(data.length > 0) {
-      (bool success,) = factory.delegatecall(data);
+      (bool success,) = _implementation().delegatecall(data);
       require(success);
     }
   }  
