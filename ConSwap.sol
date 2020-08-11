@@ -1048,46 +1048,6 @@ contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
 }
 
 
-contract ConSwapFactoryFactory {
-    
-    event Deploy(address);
-    
-    constructor(address adminFactory, address adminPair, address WETH) public payable {
-        ConSwapPair pair = new ConSwapPair();
-        emit Deploy(address(pair));
-        
-        ConSwapFactory factory = new ConSwapFactory();
-        emit Deploy(address(factory));
-        
-        InitializableAdminUpgradeabilityProxy factoryProxy = new InitializableAdminUpgradeabilityProxy();
-        factoryProxy.initialize(adminFactory, address(factory), abi.encodeWithSignature('initialize(address,address)', adminPair, address(pair)));
-        emit Deploy(address(factoryProxy));
-        
-        if(WETH == address(0)) {
-            assembly {
-                switch chainid 
-                    case  1  { WETH := 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 }      // Ethereum Mainnet
-                    case  3  { WETH := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Ropsten
-                    case  4  { WETH := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Rinkeby
-                    case  5  { WETH := 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6 }      // Ethereum Testnet Gorli
-                    case 42  { WETH := 0xd0A1E359811322d97991E03f863a0C30C2cF029C }      // Ethereum Testnet Kovan
-                    default  { WETH := 0x0                                        }      // unknown 
-            }
-        }
-        require(WETH != address(0), 'ConSwapFactoryFactory: WETH address is 0x0');
-
-        ConSwapRouter02 router = new ConSwapRouter02(address(factoryProxy), WETH);
-        emit Deploy(address(router));
-        
-        InitializableAdminUpgradeabilityProxy routerProxy = new InitializableAdminUpgradeabilityProxy();
-        routerProxy.initialize(adminFactory, address(router), abi.encodeWithSignature('initialize(address,address)', address(factoryProxy), WETH));
-        emit Deploy(address(routerProxy));
-        
-        selfdestruct(msg.sender);
-    }
-}
-
-
 /**
  * @title Elliptic curve signature operations
  * @dev Based on https://gist.github.com/axic/5b33912c6f61ae6fd96d6c4a47afde6d
@@ -1931,5 +1891,52 @@ library TransferHelper {
     function safeTransferETH(address to, uint value) internal {
         (bool success,) = to.call.value(value)(new bytes(0));           // (bool success,) = to.call{value:value}(new bytes(0));
         require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
+    }
+}
+
+
+contract DeployFactory {
+    event Deploy(bytes32 name, address addr);
+    
+    constructor(address adminFactory, address adminPair) public {
+        ConSwapPair pair = new ConSwapPair();
+        emit Deploy('ConSwapPair', address(pair));
+        
+        ConSwapFactory factory = new ConSwapFactory();
+        emit Deploy('ConSwapFactory', address(factory));
+        
+        InitializableAdminUpgradeabilityProxy factoryProxy = new InitializableAdminUpgradeabilityProxy();
+        factoryProxy.initialize(adminFactory, address(factory), abi.encodeWithSignature('initialize(address,address)', adminPair, address(pair)));
+        emit Deploy('factoryProxy', address(factoryProxy));
+        
+        selfdestruct(msg.sender);
+    }
+}
+    
+contract DeployRouter {
+    event Deploy(bytes32 name, address addr);
+    
+    constructor(address adminRouter, address factoryProxy, address WETH) public {
+        if(WETH == address(0)) {
+            assembly {
+                switch chainid 
+                    case  1  { WETH := 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 }      // Ethereum Mainnet
+                    case  3  { WETH := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Ropsten
+                    case  4  { WETH := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Rinkeby
+                    case  5  { WETH := 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6 }      // Ethereum Testnet Gorli
+                    case 42  { WETH := 0xd0A1E359811322d97991E03f863a0C30C2cF029C }      // Ethereum Testnet Kovan
+                    default  { WETH := 0x0                                        }      // unknown 
+            }
+        }
+        require(WETH != address(0), 'ConSwapFactoryFactory: WETH address is 0x0');
+
+        ConSwapRouter02 router = new ConSwapRouter02(address(factoryProxy), WETH);
+        emit Deploy('ConSwapRouter02', address(router));
+        
+        InitializableAdminUpgradeabilityProxy routerProxy = new InitializableAdminUpgradeabilityProxy();
+        routerProxy.initialize(adminRouter, address(router), abi.encodeWithSignature('initialize(address,address)', address(factoryProxy), WETH));
+        emit Deploy('routerProxy', address(routerProxy));
+        
+        selfdestruct(msg.sender);
     }
 }
