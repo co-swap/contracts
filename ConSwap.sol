@@ -529,6 +529,8 @@ contract Proxy {
    * Extracted to enable manual triggering.
    */
   function _fallback() internal {
+    if(OpenZeppelinUpgradesAddress.isContract(msg.sender) && msg.data.length == 0 && gasleft() <= 2300)         // for receive ETH only from other contract
+        return;
     _willFallback();
     _delegate(_implementation());
   }
@@ -1002,7 +1004,9 @@ contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
 
     constructor() public {
         feeToSetter = msg.sender;
+        emit PairCodeHash(keccak256(type(InitializableProductProxy).creationCode));
     }
+    event PairCodeHash(bytes32 pairCodeHash);
 
     function initialize(address _feeToSetter, address _productImplementation) public {
         require(feeToSetter== address(0) && _feeToSetter != address(0), 'ConSwapFactory.initialize can be delegatecall once by proxy only.');
@@ -1793,8 +1797,13 @@ contract ConSwapRouter02 is IUniswapV2Router01, IUniswapV2Router02, Initializabl
 
 library UniswapV2Library {
     using SafeMath for uint;
-    bytes32 internal constant contractCodeHash = keccak256(type(InitializableProductProxy).creationCode);
-
+    //bytes32 private constant PairCodeHash = keccak256(type(InitializableProductProxy).creationCode);      // it will be changed when deploy because of Swarm bzzr
+    bytes32 private constant PairCodeHash = hex'9e3d176cd7b9504eb5f6b77283eeba7ad886f58601c2a02d5adcb699159904b4';
+    
+    function pairCodeHash() internal pure returns (bytes32) {
+        return PairCodeHash;
+    }
+    
     // returns sorted token addresses, used to handle return values from pairs sorted in this order
     function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
         require(tokenA != tokenB, 'UniswapV2Library: IDENTICAL_ADDRESSES');
@@ -1809,7 +1818,7 @@ library UniswapV2Library {
                 hex'ff',
                 factory,
                 keccak256(abi.encodePacked(token0, token1)),
-				contractCodeHash                                    //hex'96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f' // init code hash
+				PairCodeHash                                    //hex'96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f' // init code hash
             ))));
     }
 
@@ -1897,7 +1906,7 @@ library TransferHelper {
 
 
 contract DeployFactory {
-    event Deploy(bytes32 name, address addr);
+    event Deploy(string name, address addr);
     
     constructor(address adminFactory, address adminPair) public {
         ConSwapPair pair = new ConSwapPair();
@@ -1918,17 +1927,8 @@ contract DeployRouter {
     event Deploy(bytes32 name, address addr);
     
     constructor(address adminRouter, address factoryProxy, address WETH) public {
-        if(WETH == address(0)) {
-            assembly {
-                switch chainid 
-                    case  1  { WETH := 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 }      // Ethereum Mainnet
-                    case  3  { WETH := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Ropsten
-                    case  4  { WETH := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Rinkeby
-                    case  5  { WETH := 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6 }      // Ethereum Testnet Gorli
-                    case 42  { WETH := 0xd0A1E359811322d97991E03f863a0C30C2cF029C }      // Ethereum Testnet Kovan
-                    default  { WETH := 0x0                                        }      // unknown 
-            }
-        }
+        if(WETH == address(0))
+            WETH = AddressWETH.WETH();
         require(WETH != address(0), 'ConSwapFactoryFactory: WETH address is 0x0');
 
         ConSwapRouter02 router = new ConSwapRouter02(address(factoryProxy), WETH);
@@ -1939,5 +1939,37 @@ contract DeployRouter {
         emit Deploy('routerProxy', address(routerProxy));
         
         selfdestruct(msg.sender);
+    }
+}
+
+contract Test {
+    function pairFor(address factory, address tokenA, address tokenB) public pure returns (address) {
+        return UniswapV2Library.pairFor(factory, tokenA, tokenB);
+    }
+    
+    function pairCreationCode() public pure returns (bytes memory) {
+        return type(InitializableProductProxy).creationCode;
+    }
+    
+    function pairCodeHash() public pure returns (bytes32) {
+        return UniswapV2Library.pairCodeHash();
+    }
+    
+    function pairCodeHash2() public pure returns (bytes32) {
+        return keccak256(type(InitializableProductProxy).creationCode);
+    }
+}
+
+library AddressWETH {
+    function WETH() internal pure returns (address addr) {
+        assembly {
+            switch chainid() 
+                case  1  { addr := 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 }      // Ethereum Mainnet
+                case  3  { addr := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Ropsten
+                case  4  { addr := 0xc778417E063141139Fce010982780140Aa0cD5Ab }      // Ethereum Testnet Rinkeby
+                case  5  { addr := 0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6 }      // Ethereum Testnet Gorli
+                case 42  { addr := 0xd0A1E359811322d97991E03f863a0C30C2cF029C }      // Ethereum Testnet Kovan
+                default  { addr := 0x0                                        }      // unknown 
+        }
     }
 }
