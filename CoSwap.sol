@@ -264,7 +264,7 @@ contract UniswapV2ERC20 is IUniswapV2ERC20, Initializable {
     }
 }
 
-contract ConSwapPair is IUniswapV2Pair, UniswapV2ERC20 {
+contract CoSwapPair is IUniswapV2Pair, UniswapV2ERC20 {
     using SafeMath  for uint;
     using UQ112x112 for uint224;
 
@@ -294,7 +294,7 @@ contract ConSwapPair is IUniswapV2Pair, UniswapV2ERC20 {
     // https://docs.openzeppelin.com/upgrades/2.8/writing-upgradeable#avoid-initial-values-in-field-declarations
     uint private locked;
     modifier lock() {
-        require(locked == 0, 'ConSwap: LOCKED');
+        require(locked == 0, 'CoSwap: LOCKED');
         locked = 1;
         _;
         locked = 0;
@@ -990,7 +990,7 @@ contract ProxyFactory {
 }
 */
 
-contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
+contract CoSwapFactory is IProxyFactory, IUniswapV2Factory {
     
     address public productImplementation;
     
@@ -1009,7 +1009,7 @@ contract ConSwapFactory is IProxyFactory, IUniswapV2Factory {
     event PairCodeHash(bytes32 pairCodeHash);
 
     function initialize(address _feeToSetter, address _productImplementation) public {
-        require(feeToSetter== address(0) && _feeToSetter != address(0), 'ConSwapFactory.initialize can be delegatecall once by proxy only.');
+        require(feeToSetter== address(0) && _feeToSetter != address(0), 'CoSwapFactory.initialize can be delegatecall once by proxy only.');
         feeToSetter = _feeToSetter;
         productImplementation = _productImplementation;
     }
@@ -1355,7 +1355,7 @@ interface IWETH {
     function withdraw(uint) external;
 }
 
-contract ConSwapRouter02 is IUniswapV2Router01, IUniswapV2Router02, Initializable {
+contract CoSwapRouter02 is IUniswapV2Router01, IUniswapV2Router02, Initializable {
     using SafeMath for uint;
 
     address public factory;   // immutable override
@@ -1909,16 +1909,18 @@ contract DeployFactory {
     event Deploy(string name, address addr);
     
     constructor(address adminFactory, address adminPair) public {
-        ConSwapPair pair = new ConSwapPair();
-        emit Deploy('ConSwapPair', address(pair));
+        CoSwapPair pair = new CoSwapPair();
+        emit Deploy('CoSwapPair', address(pair));
         
-        ConSwapFactory factory = new ConSwapFactory();
-        emit Deploy('ConSwapFactory', address(factory));
+        CoSwapFactory factory = new CoSwapFactory();
+        emit Deploy('CoSwapFactory', address(factory));
         
         InitializableAdminUpgradeabilityProxy factoryProxy = new InitializableAdminUpgradeabilityProxy();
         factoryProxy.initialize(adminFactory, address(factory), abi.encodeWithSignature('initialize(address,address)', adminPair, address(pair)));
         emit Deploy('factoryProxy', address(factoryProxy));
         
+        log1('PairCodeHash', keccak256(type(InitializableProductProxy).creationCode));      // it will be changed when deploy because of Swarm bzzr
+
         selfdestruct(msg.sender);
     }
 }
@@ -1929,10 +1931,10 @@ contract DeployRouter {
     constructor(address adminRouter, address factoryProxy, address WETH) public {
         if(WETH == address(0))
             WETH = AddressWETH.WETH();
-        require(WETH != address(0), 'ConSwapFactoryFactory: WETH address is 0x0');
+        require(WETH != address(0), 'CoSwapFactoryFactory: WETH address is 0x0');
 
-        ConSwapRouter02 router = new ConSwapRouter02(address(factoryProxy), WETH);
-        emit Deploy('ConSwapRouter02', address(router));
+        CoSwapRouter02 router = new CoSwapRouter02(address(factoryProxy), WETH);
+        emit Deploy('CoSwapRouter02', address(router));
         
         InitializableAdminUpgradeabilityProxy routerProxy = new InitializableAdminUpgradeabilityProxy();
         routerProxy.initialize(adminRouter, address(router), abi.encodeWithSignature('initialize(address,address)', address(factoryProxy), WETH));
